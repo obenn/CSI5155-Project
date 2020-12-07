@@ -1,0 +1,4 @@
+https://github.com/scikit-learn/scikit-learn/issues/9292
+https://github.com/rosefun/semisupervised
+
+LabelPropagation 95% failed for nn up to 300
