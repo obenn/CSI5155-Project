@@ -1,4 +1,6 @@
 https://github.com/scikit-learn/scikit-learn/issues/9292
 https://github.com/rosefun/semisupervised
+Commited to the above
 
 LabelPropagation 95% failed for nn up to 300
+Tried S3VM from semisupervised but not enough memory
