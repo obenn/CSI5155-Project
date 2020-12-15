@@ -1,6 +1,12 @@
 https://github.com/scikit-learn/scikit-learn/issues/9292
+Experienced this issue on LabelPropagation >= 90%
+
 https://github.com/rosefun/semisupervised
 Commited to the above
+https://github.com/rosefun/SemiSupervised/pull/1
+https://github.com/rosefun/SemiSupervised/pull/2
 
-LabelPropagation 95% failed for nn up to 300
-Tried S3VM from semisupervised but not enough memory
+Tried S3VM from semisupervised but not enough memory, same as linear kernel
+SAE was prohibitively slow of CPU but GPU made it bearable
+
+SAE performed MUCH better on epochs = 10, vs 100
