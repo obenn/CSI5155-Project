@@ -2,6 +2,9 @@
 December 16 2020
 Oliver Benning
 
+## Abstract
+
+In this report we analyse the accompanying dataset for the study [https://www.hindawi.com/journals/bmri/2014/781670/](Impact of HbA1c Measurement on Hospital Readmission Rates). We first tackle the multiclass problem of predicting re 
 
 ## General remarks
 
@@ -11,7 +14,19 @@ The code and results for this project are in the accompanying notebook, project.
 
 Tools used to run this project include: sklearn, numpy, pandas, matplotlib and semisupervised (containing keras and torch). The project was created in the Anaconda Python 3.8 environment. The notebook takes about 20 hours to run on a modern machine with GPU acceleration.
 
-## Part A: Supervised learning
+### Computation Methedology
+
+Every algorithm configuration here is analysed in the following manner.
+
+If it is multi-class, the algorithm is executed on all combinations of size two in a 10 fold cross validation manner, to draw roc curves of the performance and assess its performance on the binary problem subsets in the data. The mean auc score from these attemps is calculated and the visual curves show both the mean auc line as well as the 10 individual folds and the standard deviation.
+
+Next, 10 fold cross-validation is run on the algorithm to compute a score on the algorithm, which is used later to determine statistical difference.
+
+Next, 10 fold validation is once again used on the multi-class setting to produce a confusion matrix. The confusion matrix is also analysed and the metrics of recall, specificity, precision, F-score, accuracy and balanced accuracy are computed using 0 as the negative class and the others as positive.
+
+Finally, once a group of algorithms is analysed, the pairwise T-test is used on the 10-fold scores for each pair of algorithms to compute statistical difference and the table is shown. We also create tables of the confusion matrix derived metrics to compare performance as well.
+
+# Part A: Supervised learning
 
 ### Feature engineering
 
@@ -37,14 +52,63 @@ Assumptions:
 
 ## Task 1
 
-The algorithms chosen here were Decision Tree (DT), Naive Bais (NB) and k Nearest Neighbours (kNN). Bagging (BA) was also tried using the GradientBoostingClassifier. These algorithms were chosen due to their native multi-class support, as well as to get a good mix of variety in the learners. Boosting was chosen to see if it can improve on the single learner results.
+The algorithms chosen here were Decision Tree (DT), Naive Bais (NB) and k Nearest Neighbours (kNN). Boosting (BO) was also tried using the GradientBoostingClassifier. These algorithms were chosen due to their native multi-class support, as well as to get a good mix of variety in the learners. Boosting was chosen to see if it can improve on the single learner results.
 
-For every train-test prediction we make we use 10-fold cross validation for better results, since we can afford the training time.
-
-Starting with the single learners. For each algorithm three ROC curves were generated for the 3 combinations of the 3 class features in readmitted. The k for kNN was selected using test predictions on a holdout set and choosing the least mean error.
+The n for kNN was chosen by making repeated predictions on a 10% holdout set for the first 100 k values, and seeing which had the minimum error.
 
 The prediction here is more of two nested binary predictions. We care most about 0 vs. {1,2}, i.e. whether or not they were readmitted at all, and then 1 vs 2 to show how long it took. We observe O.K. results for the 0-1 and 0-2 paired ROC curves, but notable very low scores for 1-2 curve in the single learner algorithms. This suggests that readmittal vs no readmittal performance may be passable, but differentiating over or under 30 days is likely not possible.
 
-Next, a confusion matrix was plotted for each algorithm along with statistics about predictions, namely recall (TPR), specificity (TNR), precision, and F-measure.
+Let's first understand the problem, these are patient readmittals, and a hospital would likely want to know this in order to predict whether it should prepare for re-admittal or not. In a real case I would verify with a client which one is worse, being too prepared and wasting resources (choosing high recall), or being underprepared and wasting resources (choosing high precision/specificity).
 
-First, we make sure the algorithms are statistically different. Since 
+In this case this is indeed a tradeoff in this case as all models are statistically different and no model excels in both. For high recall DT looks to ourperform NB. For high precision/specifity BO loks to outperform kNN with higher precision and F-score, it also had the highest accuracy.
+
+We'll try one more trick. Our classes look quite balanced but there may be too many features. We will try k best features to see if that could help. The data has 239 features after transformation, so we will cut the value in half to 120 to see if that helps.
+
+I would therefore recommend to a client DT if recall is a priority, and BO if not. That being said, if it were the case that specificity and precision was priority AND that it was an online or training time sensitive setting, kNN would be best as it trains much faster.
+
+Although DT and BO win out, no algorithm does exceptionally well. I'm concerned about the high number of features in the data so I try and see if cutting that number in half would help, by selecting the k=120 best features out of 239.
+
+DT got a slight boost in all metrics except specificity, and BO got a slight decrease. The performance change was so minor I do not think feature selection is worth it on this data and would avoid doing so in production.
+
+
+## Task 2
+
+I opted to predict the 'change' column. This was conveniently already a balanced binary class, but also looked like a useful feature to predict for the medical domain, in the case of a patient who has insuifficient records. I got near perfect results and realized it had perfect correlation with a value of 1 or 3 in the medication column (a change) so I realized I had to switch to something more meaningful.
+
+Instead I looked into 'metformin', which is a diabetes medication taken commonly by individuals with diabetes, but not all. In this dataset, 1/4 of individuals who take diabetes medications take metformin. Let's see if we can predict whether an individual is taking metformin from the data, we will turn this into a binary problem by treating an increase, steady or decrease as the same postitive class label.
+
+I used Random Forest and LinearSVM models to round out the remaining model classes left, and to use models that are optimal in binary classification settings on a binary classification problem. I also use bagging with the default linear kernel to see whether performance can be increased.
+
+Results here are extremely interesting. First, all 3 algorithms are statistically different. Next, RF completely ourperforms SV. SV is subject to overfitting, which I believe is what happened here.
+
+When comparing BA to RF, it has much better recall and F-score and accuracy, it's much better at predicting the positive class. But, the balanced accuracy metrics are the same. This suggests to me that class imbalance is the reason RF is performin poorly, and BA by nature is better suited at overcoming this problem. I like the performance of BA here and would suggest this as the best algorithm, however, if a single learner was required it may be possible to increase the performance of RF using a class balancing technique, and stripping rows with diabetesMed as No.
+
+
+##
+
+# Part B: Semi-Supervised learning
+
+In this part we test different semi-supervised learning algorithms on Task 1 in Part A, to predict readmittal from the data. We will use the percentages 0% (baseline), 10%, 20%, 50%, 90% and 95% of missing labels for each of 3 algorithms for a total of 18 analyses. The algorithms are LabelPropagation (LP), LabelSpreading (LS) and StackedAutoEncoder (SA). For LP and LS, a knn kernel was used with the optimal k as found in part A. We note that knn performed poorly in part A, so expectations are not high.
+
+The same procedure as Part A was followed as well, with the addition of unlabelling a certain percentage of observations from the feature column.
+
+First we will analyse each algorithm individually.
+
+For LP we have overall performance similar to kNN. All algorithsm before differently here with 10% actually providing the best recall and F score. 20% and 50% decrease the performance, whereas 90% and 95% perform so poorly they crash the algorith as seen in [https://github.com/scikit-learn/scikit-learn/issues/9292
+](this GitHub issue).
+
+For LS all percentages are statistically different predictors and in the baseline we have similar results to kNN(39) from part A, with a slight decrease in recall and F score and an increase in precision. Recall and F score decreases up to 50% but actually increases at 90% and 95%.
+
+The SA algorithm is a much more complicated one, using neural nets internally. 10 iterations were selected for computation speed, and because it produced better ROC scores than 100 in baseline. We note however that predictions are all over the place, roc curve variance is very high. Baseline predicts all 0, whereas at 20% and 50% it predicts all postive cases, but shifting from mostly 1 to 2. m_auc scores stay comparable with agorithms in part A. When we get to 90 and 95% the results are more interesting, in the 90% case we predict mostly 2, and in the 95% case we predict mostly 1, statistically this leads .
+
+
+# Other Lessons learned
+
+In general, I learned to start early in machine learning, and I'm glad I did with this project. This would have been physically impossible to do last minute as the notebook takes around 20 hours to execute from start to finish. Related, I learned even further how useful jupyter notebooks were, by saving post variables we don't need to re-run everything from scratch and can instead re-iterate on a cell.
+
+I learned a lot about open source. When I was looking for a third SSL algorithm I came across the [https://pypi.org/project/semisupervised/](semisupervised) project for python. Unfortunately the S3VM and SAE algorithms didn't work in a plug and play fashion. What was really cool was that I was able to fix them and actually commit my changes back to the project via the two pull requests below, which the author actually accepted!
+
+https://github.com/rosefun/SemiSupervised/pull/1
+https://github.com/rosefun/SemiSupervised/pull/2
+
+
